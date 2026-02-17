@@ -6,371 +6,235 @@ import re
 app = Flask(__name__)
 
 HTML_PAGE = """
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>리뷰 답변 생성기</title>
   <style>
     :root{
-      --bg:#0b1220;
-      --card:#0f1b33;
-      --card2:#0b162d;
-      --text:#e8eefc;
-      --muted:#9db0d6;
-      --line:rgba(255,255,255,.08);
-      --blue:#3b82f6;
-      --blue2:#2563eb;
-      --red:#ef4444;
-      --shadow: 0 14px 50px rgba(0,0,0,.45);
-      --radius: 18px;
+      --bg:#0b1020;
+      --panel:#101a33;
+      --panel2:#0e1730;
+      --text:#eef2ff;
+      --muted:#a8b3d6;
+      --line:rgba(255,255,255,.10);
+      --btn:#3b82f6;
+      --btn2:#2563eb;
+      --shadow: 0 14px 40px rgba(0,0,0,.35);
+      --r:16px;
     }
-    *{ box-sizing:border-box; }
+    *{box-sizing:border-box}
     body{
       margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", Arial, sans-serif;
-      background:
-        radial-gradient(1200px 500px at 20% -10%, rgba(59,130,246,.35), transparent 60%),
-        radial-gradient(900px 400px at 90% 0%, rgba(16,185,129,.18), transparent 55%),
-        var(--bg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo","Noto Sans KR", Arial, sans-serif;
+      background: linear-gradient(180deg, rgba(59,130,246,.18), transparent 45%), var(--bg);
       color:var(--text);
     }
-    .wrap{
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 28px 16px 60px;
-    }
-    .top{
-      display:flex;
-      gap:14px;
-      align-items:flex-start;
-      justify-content:space-between;
-      margin-bottom: 18px;
-    }
-    .brand{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .title{
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-      margin:0;
-    }
-    .subtitle{
-      margin:0;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.45;
-    }
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(59,130,246,.12);
-      border:1px solid rgba(59,130,246,.22);
-      color:#cfe1ff;
-      font-size: 12px;
-      white-space:nowrap;
-      margin-top: 4px;
-    }
-
-    .grid{
-      display:grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap: 14px;
-    }
-    @media (max-width: 860px){
-      .grid{ grid-template-columns: 1fr; }
-      .top{ flex-direction:column; }
-    }
-
+    .wrap{max-width:820px;margin:0 auto;padding:18px 14px 50px}
+    .header{margin:10px 2px 14px}
+    .title{margin:0;font-size:22px;font-weight:900;letter-spacing:-.2px}
+    .sub{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:1.5}
     .card{
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      border:1px solid var(--line);
+      border-radius: var(--r);
       box-shadow: var(--shadow);
       overflow:hidden;
     }
-    .card .head{
-      padding: 16px 16px 12px;
-      border-bottom: 1px solid var(--line);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 10px;
-      background: rgba(0,0,0,.10);
+    .section{padding:14px}
+    .label{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      margin:0 0 10px;
+      font-size:13px;color:var(--muted);
     }
-    .card .head h2{
-      margin:0;
-      font-size: 14px;
-      letter-spacing: .2px;
-      color: #cfe1ff;
-      font-weight: 800;
-    }
-    .card .body{
-      padding: 16px;
-    }
-
-    .textarea{
+    .label b{color:#dbe6ff}
+    textarea{
       width:100%;
-      min-height: 160px;
-      resize: vertical;
-      padding: 14px 14px;
+      min-height:150px;
+      padding:12px 12px;
       border-radius: 14px;
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(2,6,23,.50);
-      color: var(--text);
-      font-size: 15px;
-      line-height: 1.55;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(2,6,23,.45);
+      color:var(--text);
+      font-size:15px;
+      line-height:1.6;
+      outline:none;
+      resize:vertical;
+    }
+    textarea:focus{
+      border-color: rgba(59,130,246,.65);
+      box-shadow: 0 0 0 4px rgba(59,130,246,.14);
+    }
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    @media (max-width:520px){.row{grid-template-columns:1fr}}
+    select{
+      width:100%;
+      padding:12px 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(2,6,23,.45);
+      color:var(--text);
+      font-size:14px;
       outline:none;
     }
-    .textarea:focus{
+    select:focus{
       border-color: rgba(59,130,246,.65);
-      box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+      box-shadow: 0 0 0 4px rgba(59,130,246,.14);
     }
-
-    .row{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 12px;
-    }
-    @media (max-width: 520px){
-      .row{ grid-template-columns: 1fr; }
-    }
-
-    .select{
-      width:100%;
-      padding: 12px 12px;
-      border-radius: 14px;
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(2,6,23,.50);
-      color: var(--text);
-      font-size: 14px;
-      outline:none;
-    }
-    .select:focus{
-      border-color: rgba(59,130,246,.65);
-      box-shadow: 0 0 0 4px rgba(59,130,246,.15);
-    }
-
-    .actions{
-      display:flex;
-      gap: 10px;
-      margin-top: 12px;
-      flex-wrap: wrap;
-    }
-    .btn{
-      appearance:none;
-      border:none;
-      border-radius: 14px;
-      padding: 12px 14px;
-      font-size: 14px;
-      font-weight: 800;
-      cursor:pointer;
-      transition: transform .05s ease, opacity .15s ease, background .15s ease;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap: 10px;
+    .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+    button{
+      border:0;cursor:pointer;border-radius:14px;
+      padding:12px 14px;
+      font-weight:900;
+      font-size:14px;
       user-select:none;
     }
-    .btn:active{ transform: scale(.98); }
-
-    .btn.primary{
-      background: linear-gradient(180deg, rgba(59,130,246,1), rgba(37,99,235,1));
-      color: white;
-      flex: 1;
-      min-width: 200px;
+    .primary{
+      background: linear-gradient(180deg, var(--btn), var(--btn2));
+      color:white; flex:1; min-width:200px;
     }
-    .btn.primary:hover{ opacity:.95; }
-
-    .btn.ghost{
+    .ghost{
       background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
       color: var(--text);
     }
-    .btn.ghost:hover{ background: rgba(255,255,255,.09); }
-
-    .hint{
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .result{
+    .primary:active,.ghost:active{transform:scale(.98)}
+    .note{margin-top:10px;color:rgba(168,179,214,.85);font-size:12px;line-height:1.45}
+    .divider{height:1px;background:var(--line);margin:0}
+    .resultBox{
+      background: rgba(2,6,23,.45);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      padding: 12px;
+      line-height: 1.7;
       white-space: pre-wrap;
-      background: rgba(2,6,23,.55);
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: 16px;
-      padding: 14px;
-      line-height: 1.6;
       font-size: 15px;
     }
-    .meta{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 10px;
-      margin-bottom: 10px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 999px;
+    .topRight{display:flex;gap:8px;align-items:center}
+    .miniBtn{
+      padding:9px 12px;border-radius:999px;
       background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      font-weight:900;
+      font-size:13px;
     }
-
     .error{
       background: rgba(239,68,68,.10);
-      border: 1px solid rgba(239,68,68,.25);
-      color: #ffd0d0;
-      border-radius: 16px;
-      padding: 14px;
+      border:1px solid rgba(239,68,68,.25);
+      color:#ffd0d0;
+      border-radius: 14px;
+      padding: 12px;
       line-height: 1.6;
       font-size: 14px;
     }
 
-    /* 로딩 오버레이 */
+    /* 로딩 */
     .overlay{
-      position: fixed;
-      inset: 0;
-      background: rgba(2,6,23,.62);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      padding: 20px;
-      z-index: 9999;
+      position:fixed;inset:0;
+      background: rgba(2,6,23,.55);
+      display:none;align-items:center;justify-content:center;
+      z-index:9999;padding:20px;
     }
-    .overlay.on{ display:flex; }
-    .loaderCard{
-      width: min(420px, 100%);
-      background: rgba(15,27,51,.85);
-      border: 1px solid rgba(255,255,255,.10);
+    .overlay.on{display:flex}
+    .loader{
+      width:min(380px,100%);
+      background: rgba(16,26,51,.88);
+      border:1px solid rgba(255,255,255,.12);
       border-radius: 18px;
       box-shadow: var(--shadow);
-      padding: 18px;
+      padding: 16px;
       text-align:center;
     }
     .spinner{
-      width: 44px;
-      height: 44px;
-      border-radius: 999px;
-      border: 4px solid rgba(255,255,255,.18);
+      width:40px;height:40px;border-radius:999px;
+      border:4px solid rgba(255,255,255,.18);
       border-top-color: rgba(59,130,246,1);
-      margin: 10px auto 12px;
+      margin: 8px auto 12px;
       animation: spin .9s linear infinite;
     }
-    @keyframes spin{ to{ transform: rotate(360deg); } }
-    .loaderTitle{ font-weight: 900; margin: 0 0 6px; }
-    .loaderText{ margin:0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loader b{display:block;margin-bottom:6px}
+    .loader p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
 
-    .footer{
-      margin-top: 14px;
-      color: rgba(157,176,214,.75);
-      font-size: 12px;
-      text-align:center;
-    }
-    a{ color:#cfe1ff; }
+    .footer{margin-top:12px;color:rgba(168,179,214,.65);font-size:12px;text-align:center}
   </style>
 </head>
-
 <body>
   <div class="wrap">
-    <div class="top">
-      <div class="brand">
-        <h1 class="title">리뷰 답변 생성기</h1>
-        <p class="subtitle">리뷰를 붙여넣고 버튼 누르면 “사장님 답변”을 자동 생성해줘. (현재는 API 없이 규칙 기반)</p>
-        <div class="badge">✅ 폰 최적화 · ✅ 복사 버튼 · ✅ 배포됨(Render)</div>
+    <div class="header">
+      <h1 class="title">리뷰 답변 생성기</h1>
+      <p class="sub">리뷰 입력 → 말투/길이 선택 → 사장님 답변 생성</p>
+    </div>
+
+    <div class="card">
+      <div class="section">
+        <div class="label">
+          <span><b>리뷰</b>를 붙여넣어줘</span>
+          <span class="topRight"></span>
+        </div>
+
+        <form id="genForm" method="POST">
+          <textarea name="review" placeholder="예) 음식은 맛있는데 배달이 늦었어요. 다음엔 좀 더 빨랐으면 좋겠어요.">{{ review_value or "" }}</textarea>
+
+          <div class="row">
+            <select name="tone">
+              <option value="정중" {{ "selected" if tone=="정중" else "" }}>정중</option>
+              <option value="친근" {{ "selected" if tone=="친근" else "" }}>친근</option>
+              <option value="사과" {{ "selected" if tone=="사과" else "" }}>사과</option>
+              <option value="단호" {{ "selected" if tone=="단호" else "" }}>단호</option>
+            </select>
+
+            <select name="length">
+              <option value="짧게" {{ "selected" if length=="짧게" else "" }}>짧게</option>
+              <option value="보통" {{ "selected" if length=="보통" else "" }}>보통</option>
+              <option value="길게" {{ "selected" if length=="길게" else "" }}>길게</option>
+            </select>
+          </div>
+
+          <div class="btns">
+            <button class="primary" type="submit">답변 생성</button>
+            <button class="ghost" type="button" onclick="clearAll()">초기화</button>
+          </div>
+
+          <div class="note">
+            무료 배포는 처음 접속 시 조금 느릴 수 있어. 정상임.
+          </div>
+        </form>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section">
+        <div class="label">
+          <span><b>결과</b></span>
+          <span class="topRight">
+            <button class="miniBtn" type="button" onclick="copyResult()">복사</button>
+          </span>
+        </div>
+
+        {% if error %}
+          <div class="error"><b>에러:</b><br/>{{ error }}</div>
+        {% elif result %}
+          <div id="resultBox" class="resultBox">{{ result }}</div>
+        {% else %}
+          <div class="resultBox" style="color:rgba(168,179,214,.85);">
+            아직 결과 없음. 위에 리뷰 넣고 “답변 생성” 눌러봐.
+          </div>
+        {% endif %}
       </div>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <div class="head">
-          <h2>입력</h2>
-          <div class="pill">팁: 리뷰가 길수록 더 자연스러움</div>
-        </div>
-        <div class="body">
-          <form id="genForm" method="POST">
-            <textarea class="textarea" name="review" placeholder="예) 음식은 맛있는데 배달이 너무 늦었어요. 양은 괜찮았는데 다음엔 빨랐으면 좋겠네요.">{{ review_value or "" }}</textarea>
-
-            <div class="row">
-              <select class="select" name="tone">
-                <option value="정중" {{ "selected" if tone=="정중" else "" }}>정중</option>
-                <option value="친근" {{ "selected" if tone=="친근" else "" }}>친근</option>
-                <option value="사과" {{ "selected" if tone=="사과" else "" }}>사과</option>
-                <option value="단호" {{ "selected" if tone=="단호" else "" }}>단호</option>
-              </select>
-
-              <select class="select" name="length">
-                <option value="짧게" {{ "selected" if length=="짧게" else "" }}>짧게</option>
-                <option value="보통" {{ "selected" if length=="보통" else "" }}>보통</option>
-                <option value="길게" {{ "selected" if length=="길게" else "" }}>길게</option>
-              </select>
-            </div>
-
-            <div class="actions">
-              <button class="btn primary" type="submit">
-                <span>답변 생성</span>
-              </button>
-              <button class="btn ghost" type="button" onclick="clearForm()">
-                초기화
-              </button>
-            </div>
-
-            <div class="hint">
-              무료 배포(Render)는 처음 접속 시 20~50초 느릴 수 있어. 정상임.
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="head">
-          <h2>결과</h2>
-          <div class="pill">복사 가능</div>
-        </div>
-        <div class="body">
-          {% if error %}
-            <div class="error"><b>에러:</b><br/>{{ error }}</div>
-          {% elif result %}
-            <div class="meta">
-              <span>말투: <b>{{ tone }}</b> · 길이: <b>{{ length }}</b></span>
-              <button class="btn ghost" type="button" onclick="copyResult()">복사</button>
-            </div>
-            <div id="resultBox" class="result">{{ result }}</div>
-          {% else %}
-            <div class="result" style="color:rgba(157,176,214,.9);">
-              아직 결과 없음.<br/>
-              왼쪽에 리뷰 넣고 “답변 생성” 눌러봐.
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="footer">
-      Made by logankeem · 배포 링크로 친구한테 보내도 됨 😎
-    </div>
+    <div class="footer">배포 링크 그대로 공유해도 됨</div>
   </div>
 
   <div id="overlay" class="overlay">
-    <div class="loaderCard">
+    <div class="loader">
       <div class="spinner"></div>
-      <p class="loaderTitle">생성 중…</p>
-      <p class="loaderText">잠깐만. 답변 만들고 있어.</p>
+      <b>생성 중…</b>
+      <p>잠깐만. 답변 만들고 있어.</p>
     </div>
   </div>
 
@@ -378,22 +242,18 @@ HTML_PAGE = """
     const overlay = document.getElementById("overlay");
     const form = document.getElementById("genForm");
 
-    form?.addEventListener("submit", () => {
-      overlay.classList.add("on");
-    });
+    form?.addEventListener("submit", () => overlay.classList.add("on"));
 
-    function clearForm(){
+    function clearAll(){
       const ta = form.querySelector('textarea[name="review"]');
       if(ta) ta.value = "";
-      const result = document.getElementById("resultBox");
       overlay.classList.remove("on");
     }
 
     function copyResult(){
       const el = document.getElementById("resultBox");
       if(!el) return alert("복사할 결과가 없어");
-      const text = el.innerText;
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(el.innerText);
       alert("복사 완료!");
     }
   </script>
@@ -478,11 +338,7 @@ def make_sentences(tone: str, topics, length: str):
     sentences.extend(body[: max(1, min(len(body), target - 2))])
     sentences.append(random.choice(closing.get(tone, closing["정중"])))
 
-    fillers = [
-        "소중한 의견 감사드립니다.",
-        "더 좋은 서비스로 보답하겠습니다.",
-        "다음에는 더 만족하실 수 있도록 하겠습니다."
-    ]
+    fillers = ["소중한 의견 감사드립니다.", "더 좋은 서비스로 보답하겠습니다.", "다음에는 더 만족하실 수 있도록 하겠습니다."]
     while len(sentences) < target:
         sentences.insert(-1, random.choice(fillers))
 
@@ -500,8 +356,6 @@ def fake_ai_reply(review: str, tone: str, length: str) -> str:
 def home():
     result = ""
     error = ""
-
-    # 기본 선택값 유지
     tone = "정중"
     length = "보통"
     review_value = ""
