@@ -32,10 +32,10 @@ HTML = """
 <body>
 <div class="wrap">
   <h1>리뷰 답변 생성기</h1>
-  <p class="sub">API 없이도 “긍/부정 판정 + 토픽 반영 + 3가지 스타일”로 최대한 자연스럽게 만들기</p>
+  <p class="sub">API 없이도 최대한 자연스럽게: <b>감정(긍/중/부정)</b> 먼저 판정하고 그에 맞는 문장만 사용</p>
 
   <form method="POST">
-    <textarea name="review" placeholder="예) 맛은 좋은데 배달이 늦었어요. 다음엔 빨랐으면…" required>{{ review or "" }}</textarea>
+    <textarea name="review" placeholder="예) 진짜 맛있어요! 또 시킬게요 / 배달이 늦고 식어서 왔어요" required>{{ review or "" }}</textarea>
 
     <select name="tone">
       <option value="정중" {{ "selected" if tone=="정중" else "" }}>정중</option>
@@ -64,7 +64,9 @@ HTML = """
         <div>{{ r.text }}</div>
       </div>
     {% endfor %}
-    <div class="meta">판정: <b>{{ sentiment }}</b> · 토픽: {{ topics_text }} · 생성: {{ stamp }}</div>
+    <div class="meta">
+      판정: <b>{{ sentiment }}</b> (pos={{ pos_score }}, neg={{ neg_score }}) · 토픽: {{ topics_text }} · {{ stamp }}
+    </div>
   </div>
   {% endif %}
 </div>
@@ -73,25 +75,42 @@ HTML = """
 """
 
 # ----------------------------
-# 1) 감정 판정 (긍/부정/중립)
+# 1) 감정 판정 (오판정 줄이기)
+#    - "안/못" 같은 범용 단어 제거
+#    - 강한 긍정 단어 있으면 긍정 우선
 # ----------------------------
-POS_WORDS = [
-    "맛있", "최고", "추천", "만족", "좋아", "좋았", "친절", "빠르", "깔끔", "재주문", "또", "단골", "감사", "굿", "짱"
-]
-NEG_WORDS = [
-    "별로", "최악", "실망", "불친절", "늦", "지연", "차갑", "식었", "누락", "잘못", "더럽", "머리카락",
-    "비싸", "적", "환불", "클레임", "불만", "엉망", "못", "안", "짜증"
-]
+STRONG_POS = ["최고", "대박", "강추", "추천", "미쳤", "존맛", "맛있", "완전좋", "너무좋", "만족", "재주문", "또시킬", "또 시킬", "단골"]
+POS_WORDS = ["좋", "괜찮", "만족", "감사", "친절", "빠르", "깔끔", "재주문", "또", "추천", "맛있", "굿", "짱"]
 
-def classify_sentiment(text: str) -> str:
+# 부정은 명확한 단어만 (범용 단어 제거)
+STRONG_NEG = ["최악", "실망", "환불", "사기", "불친절", "머리카락", "곰팡", "상했", "썩", "배탈", "신고"]
+NEG_WORDS = ["별로", "불만", "클레임", "늦", "지연", "차갑", "식었", "누락", "오배송", "잘못", "더럽", "냄새", "비싸", "적", "짜증", "엉망"]
+
+def score_keywords(text: str, words):
     t = text.lower()
-    pos = sum(1 for w in POS_WORDS if w in t)
-    neg = sum(1 for w in NEG_WORDS if w in t)
-    if pos >= neg + 2:
-        return "긍정"
-    if neg >= pos + 1:
-        return "부정"
-    return "중립"
+    return sum(1 for w in words if w in t)
+
+def classify_sentiment(text: str):
+    t = text.lower()
+
+    pos_score = score_keywords(t, POS_WORDS) + 2 * score_keywords(t, STRONG_POS)
+    neg_score = score_keywords(t, NEG_WORDS) + 2 * score_keywords(t, STRONG_NEG)
+
+    # 강한 긍정 단어가 있고, 강한 부정이 없으면 긍정으로 고정
+    if score_keywords(t, STRONG_POS) >= 1 and score_keywords(t, STRONG_NEG) == 0 and neg_score <= 1:
+        return "긍정", pos_score, neg_score
+
+    # 강한 부정 단어가 있으면 부정으로 고정
+    if score_keywords(t, STRONG_NEG) >= 1 and score_keywords(t, STRONG_POS) == 0:
+        return "부정", pos_score, neg_score
+
+    # 일반 규칙
+    if pos_score >= neg_score + 2:
+        return "긍정", pos_score, neg_score
+    if neg_score >= pos_score + 1:
+        return "부정", pos_score, neg_score
+    return "중립", pos_score, neg_score
+
 
 # ----------------------------
 # 2) 토픽 감지
@@ -111,15 +130,15 @@ def detect_topics(text: str):
     for topic, keys in TOPIC_RULES.items():
         if any(k in t for k in keys):
             topics.append(topic)
-    return topics[:3]  # 너무 많으면 3개까지만
+    return topics[:3]
+
 
 # ----------------------------
-# 3) 톤/길이 설정
+# 3) 톤/길이
 # ----------------------------
 LENGTH_SENT_COUNT = {"짧게": 3, "보통": 5, "길게": 7}
 
 OPENINGS = {
-    # 긍정이면 사과 금지
     "긍정": {
         "정중": ["소중한 리뷰 남겨주셔서 감사합니다.", "정성스러운 후기 감사합니다."],
         "친근": ["리뷰 남겨주셔서 감사해요! 😊", "후기 너무 고마워요!"],
@@ -161,9 +180,7 @@ CLOSINGS = {
     }
 }
 
-# ----------------------------
-# 4) 토픽별 문장 풀 (긍/부정/중립 별로 따로)
-# ----------------------------
+# 토픽 문장: 긍정에서는 “문제 개선” 뉘앙스 절대 금지
 TOPIC_LINES = {
     "긍정": {
         "맛": ["맛있게 드셨다니 정말 다행입니다.", "입맛에 맞으셨다니 기쁩니다."],
@@ -191,14 +208,10 @@ TOPIC_LINES = {
     }
 }
 
-# ----------------------------
-# 5) 3개 스타일 생성 (확실히 다르게)
-# ----------------------------
 def uniq_pick(pool, used, k):
-    # used에 있는 문장은 피해서 뽑기
     candidates = [p for p in pool if p not in used]
     if len(candidates) < k:
-        candidates = pool[:]  # 부족하면 그냥 전체
+        candidates = pool[:]
     random.shuffle(candidates)
     picked = []
     for s in candidates:
@@ -207,18 +220,15 @@ def uniq_pick(pool, used, k):
             used.add(s)
         if len(picked) >= k:
             break
-    # 그래도 부족하면 채우기
     while len(picked) < k and pool:
         picked.append(random.choice(pool))
     return picked
 
 def build_variants(review: str, tone: str, length: str):
-    sentiment = classify_sentiment(review)
+    sentiment, pos_score, neg_score = classify_sentiment(review)
     topics = detect_topics(review)
     count = LENGTH_SENT_COUNT.get(length, 5)
 
-    # 스타일별 역할:
-    # A: 기본형(깔끔) / B: 친근형(감정) / C: 해결형(조치)
     used = set()
 
     def open_line():
@@ -227,12 +237,11 @@ def build_variants(review: str, tone: str, length: str):
     def close_line():
         return random.choice(CLOSINGS[sentiment][tone])
 
-    # 토픽 문장 풀 만들기
+    # 토픽 풀
     topic_pool = []
     for tp in topics:
         topic_pool += TOPIC_LINES[sentiment].get(tp, [])
     if not topic_pool:
-        # 토픽이 없을 때 기본 풀
         if sentiment == "긍정":
             topic_pool = ["좋게 봐주셔서 큰 힘이 됩니다.", "만족하셨다니 정말 다행입니다."]
         elif sentiment == "부정":
@@ -240,28 +249,26 @@ def build_variants(review: str, tone: str, length: str):
         else:
             topic_pool = ["남겨주신 의견은 꼼꼼히 확인하겠습니다.", "다음에는 더 만족하실 수 있도록 하겠습니다."]
 
-    # 추가 감정/액션 문장 풀
-    vibe_pos = ["다음에도 같은 퀄리티로 준비하겠습니다.", "재주문해주시면 더 정성껏 챙기겠습니다."]
-    vibe_neg = ["말씀 주신 부분 충분히 이해합니다.", "불편하셨을 상황이라 생각합니다."]
+    vibe_pos = ["좋은 말씀 감사합니다.", "다음에도 같은 퀄리티로 준비하겠습니다.", "재주문해주시면 더 정성껏 챙기겠습니다."]
+    vibe_neg = ["말씀 주신 부분 충분히 이해합니다.", "불편하셨을 상황이라 생각합니다.", "기대하신 만큼 못 챙겨드린 점 죄송합니다."]
     vibe_neu = ["말씀 주신 내용 참고하겠습니다.", "더 나은 운영을 위해 반영하겠습니다."]
 
-    action_pos = ["항상 같은 기준으로 준비해 만족도 유지하겠습니다.", "포장/검수도 더 꼼꼼히 하겠습니다."]
-    action_neg = ["해당 건은 바로 점검하고 개선하겠습니다.", "필요하시면 상황을 확인해 빠르게 도와드리겠습니다."]
+    action_pos = ["포장/검수도 더 꼼꼼히 해서 만족도 유지하겠습니다.", "다음 주문도 빠르게 확인하고 정성껏 준비하겠습니다."]
+    action_neg = ["해당 내용은 바로 점검하고 개선하겠습니다.", "필요하시면 상황을 확인해 빠르게 도와드리겠습니다."]
     action_neu = ["운영 기준을 더 다듬어 만족도를 높이겠습니다.", "확인 후 개선 가능한 부분은 반영하겠습니다."]
 
-    # A) 기본형: 오픈 + 토픽 1~(count-2) + 클로징
+    # A 기본형
     a = [open_line()]
     a += uniq_pick(topic_pool, used, max(1, count - 2))
     a += [close_line()]
     a = a[:count]
 
-    # B) 친근/감정형: 오픈 + 감정문 1~2 + 토픽 1 + 클로징
+    # B 감정형
     b = [open_line()]
     if sentiment == "긍정":
         b += uniq_pick(vibe_pos, used, 2 if count >= 5 else 1)
         b += uniq_pick(topic_pool, used, 1)
     elif sentiment == "부정":
-        # 부정에서 "사과" 톤이 아니면 사과를 너무 반복하지 않게 감정문 중심
         b += uniq_pick(vibe_neg, used, 2 if count >= 5 else 1)
         b += uniq_pick(topic_pool, used, 1)
     else:
@@ -270,7 +277,7 @@ def build_variants(review: str, tone: str, length: str):
     b += [close_line()]
     b = b[:count]
 
-    # C) 해결/조치형: 오픈 + 액션문 2 + (부정이면 토픽 2) + 클로징
+    # C 해결형
     c = [open_line()]
     if sentiment == "긍정":
         c += uniq_pick(action_pos, used, 2 if count >= 5 else 1)
@@ -278,24 +285,21 @@ def build_variants(review: str, tone: str, length: str):
     elif sentiment == "부정":
         c += uniq_pick(action_neg, used, 2 if count >= 5 else 1)
         c += uniq_pick(topic_pool, used, 2 if count >= 6 else 1)
-        # 부정인데 tone이 사과가 아닐 때도 “사과처럼 보이는 문장”이 과해지지 않게 제한
     else:
         c += uniq_pick(action_neu, used, 2 if count >= 5 else 1)
         c += uniq_pick(topic_pool, used, 1)
     c += [close_line()]
     c = c[:count]
 
-    # 문장들을 자연스럽게 한 문단으로
-    def join_sentences(lines):
-        # 중복 공백/문장 정리
-        txt = " ".join([re.sub(r"\s+", " ", s).strip() for s in lines if s.strip()])
-        return txt
+    def join(lines):
+        return " ".join([re.sub(r"\s+", " ", s).strip() for s in lines if s.strip()])
 
-    return sentiment, topics, [
-        {"title": "기본형(깔끔)", "text": join_sentences(a)},
-        {"title": "친근형(감정)", "text": join_sentences(b)},
-        {"title": "해결형(조치)", "text": join_sentences(c)},
+    results = [
+        {"title": "기본형(깔끔)", "text": join(a)},
+        {"title": "친근형(감정)", "text": join(b)},
+        {"title": "해결형(조치)", "text": join(c)},
     ]
+    return sentiment, pos_score, neg_score, topics, results
 
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -305,6 +309,8 @@ def home():
     results = []
     sentiment = ""
     topics_text = ""
+    pos_score = 0
+    neg_score = 0
     stamp = ""
 
     if request.method == "POST":
@@ -313,7 +319,7 @@ def home():
         length = request.form.get("length") or "보통"
 
         if review:
-            sentiment, topics, results = build_variants(review, tone, length)
+            sentiment, pos_score, neg_score, topics, results = build_variants(review, tone, length)
             topics_text = ", ".join(topics) if topics else "없음"
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -325,6 +331,8 @@ def home():
         results=results,
         sentiment=sentiment,
         topics_text=topics_text,
+        pos_score=pos_score,
+        neg_score=neg_score,
         stamp=stamp
     )
 
