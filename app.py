@@ -1,7 +1,5 @@
 from flask import Flask, render_template_string, request
 import os
-import random
-import re
 
 app = Flask(__name__)
 
@@ -73,23 +71,44 @@ button{padding:12px;border-radius:10px;border:none;font-weight:800;margin-top:10
 </html>
 """
 
-def generate_reply(review, tone, length):
-    base = [
-        "소중한 리뷰 감사합니다.",
-        "말씀 주신 부분 확인했습니다.",
-        "더 나은 서비스로 보답하겠습니다.",
-        "다시 방문해주시면 더 만족 드리겠습니다."
-    ]
-    random.shuffle(base)
+def make_reply_style(review, style, tone, length):
+    base_thanks = {
+        "정중": "소중한 리뷰 남겨주셔서 감사합니다.",
+        "친근": "리뷰 남겨주셔서 정말 감사해요! 😊",
+        "사과": "불편을 드렸다면 진심으로 죄송합니다.",
+        "단호": "의견 남겨주셔서 감사합니다."
+    }
 
-    if length == "짧게":
-        sentences = base[:2]
-    elif length == "길게":
-        sentences = base[:4]
-    else:
-        sentences = base[:3]
+    length_map = {
+        "짧게": 2,
+        "보통": 3,
+        "길게": 5
+    }
 
-    return " ".join(sentences)
+    count = length_map.get(length, 3)
+
+    if style == 1:
+        sentences = [
+            base_thanks.get(tone),
+            "남겨주신 내용은 꼼꼼히 확인하겠습니다.",
+            "더 좋은 서비스로 보답하겠습니다."
+        ]
+
+    elif style == 2:
+        sentences = [
+            base_thanks.get(tone),
+            "말씀해주신 부분에 깊이 공감합니다.",
+            "부족했던 점은 개선하여 다시는 불편 없도록 하겠습니다."
+        ]
+
+    else:  # style 3
+        sentences = [
+            base_thanks.get(tone),
+            "지적해주신 부분은 즉시 점검하겠습니다.",
+            "다음 방문 시에는 더 만족하실 수 있도록 준비하겠습니다."
+        ]
+
+    return " ".join(sentences[:count])
 
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -101,12 +120,12 @@ def home():
         tone = request.form.get("tone")
         length = request.form.get("length")
 
-        for _ in range(3):
-            results.append(generate_reply(review_value, tone, length))
+        results.append(make_reply_style(review_value, 1, tone, length))
+        results.append(make_reply_style(review_value, 2, tone, length))
+        results.append(make_reply_style(review_value, 3, tone, length))
 
     return render_template_string(HTML_PAGE, results=results, review_value=review_value)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5001"))
     app.run(host="0.0.0.0", port=port)
-# redeploy
